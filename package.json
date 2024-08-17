@@ -1,17 +1,17 @@
 {
   "name": "restApi",
   "version": "1.0.0",
-  "description": "",
+  "description": "A simple Node.js app with a Facebook Webhook callback URL",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Your Name",
   "license": "ISC",
   "dependencies": {
     "body-parser": "^1.20.2",
-    "express": "^4.19.2",
-    "node-fetch": "^2.6.0"
+    "express": "^4.19.2"
   }
 }
