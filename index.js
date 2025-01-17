@@ -1,49 +1,84 @@
-const express = require('express');
-const bodyParser = require('body-parser');
+const express = require("express");
+const axios = require("axios");
+
 const app = express();
+app.use(express.json());
 
-const VERIFY_TOKEN = 'pagebot';
+const BASE_URL = "https://barry-32257.chipp.ai";
 
-// Parse application/json
-app.use(bodyParser.json());
+const headers = {
+  "Content-Type": "application/json",
+};
 
-// Root route to handle GET requests to "/"
-app.get('/', (req, res) => {
-    res.send('Welcome to the Facebook Webhook!');
-});
+async function fetchFeatureFlags() {
+  const response = await axios.get(`${BASE_URL}/api/featureFlags`, { headers });
+  return response.data;
+}
 
-// Verification endpoint
-app.get('/webhook', (req, res) => {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+async function checkAuthSession() {
+  const response = await axios.get(`${BASE_URL}/api/auth/session`, { headers });
+  return response.data;
+}
 
-    if (mode && token === VERIFY_TOKEN) {
-        res.status(200).send(challenge);
-    } else {
-        res.sendStatus(403);
+async function getChatSession() {
+  const params = {
+    page: 1,
+    pageSize: 5,
+    appNameId: "Barry-32257",
+  };
+  const response = await axios.get(
+    `${BASE_URL}/w/chat/api/chat-history/chat-sessions-for-user`,
+    { headers, params }
+  );
+  return response.data.chatSessions[0]; // Return the latest chat session
+}
+
+async function sendMessage(chatSessionId, userMessage) {
+  const payload = {
+    chatSessionId,
+    messages: [
+      { content: userMessage, role: "user" },
+    ],
+  };
+
+  const response = await axios.post(`${BASE_URL}/api/chat`, payload, { headers });
+  return response.data; // Return the AI's response
+}
+
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    // Step 1: Fetch Feature Flags
+    const featureFlags = await fetchFeatureFlags();
+    if (!featureFlags.find(flag => flag.key === "chat_tools" && flag.value)) {
+      return res.status(400).json({ error: "Chat tools feature is disabled." });
     }
-});
 
-// Webhook event handling endpoint
-app.post('/webhook', (req, res) => {
-    const body = req.body;
+    // Step 2: Check Authentication Session
+    await checkAuthSession();
 
-    if (body.object === 'page') {
-        body.entry.forEach(entry => {
-            const webhook_event = entry.messaging[0];
-            console.log(webhook_event);
-            // Process the event here
-        });
+    // Step 3: Retrieve or Create Chat Session
+    const chatSession = await getChatSession();
+    const chatSessionId = chatSession ? chatSession.id : null;
 
-        res.status(200).send('EVENT_RECEIVED');
-    } else {
-        res.sendStatus(404);
+    if (!chatSessionId) {
+      return res.status(400).json({ error: "No active chat session found." });
     }
+
+    // Step 4: Send User Message
+    const aiResponse = await sendMessage(chatSessionId, message);
+
+    // Step 5: Return the AI Response
+    res.json({ aiResponse });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred while processing the chat." });
+  }
 });
 
-// Start the server on port 3000
+// Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
